@@ -11,47 +11,57 @@ import copy
 
 # Something to watch out for: All tables contain a first column of checkboxes, which should be excluded for my purposes.
 
-# Requests html from "https://coralisland.fandom.com/wiki/Crafting" and converts it to a bs4 object
-with sync_playwright() as p:
-    browser = p.firefox.launch(headless=False, slow_mo=500)
-    context = browser.new_context(
-        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/115.0"
-    )
-    page = context.new_page()
 
-    page.goto("https://coralisland.fandom.com/wiki/Crafting", timeout=120000)
-    page.wait_for_selector("table.article-table")
-    html = page.content()
-
-    browser.close()
-
-soup = BeautifulSoup(html, "html.parser")
-
-# Slices out relevant-to-project html (starting with first <h3> tag and ending inclusively with <table...id="tpt-13"> tag) and prettifies it.
-start_tag = None
-for h3 in soup.find_all("h3"):
-    if h3.find("span", id="Storage"):
-        start_tag = h3
-        break
-
-end_tag = soup.find("table", id="tpt-13")
-
-wrapper = soup.new_tag("div")
-
-if start_tag and end_tag:
-    curr = start_tag
-    while curr and curr != end_tag:
-        wrapper.append(copy.copy(curr))
-        curr = curr.find_next_sibling()
-
-    wrapper.append(copy.copy(end_tag))
-
-final_html = wrapper.prettify()
-
-# Saves relevant html as html.txt to avoid having to scrape website during certain testing.
 script_dir = os.path.dirname(os.path.abspath(__file__))
 dest_path = os.path.join(script_dir, "..", "tmp", "html.txt")
 
-os.makedirs(os.path.dirname(dest_path), exist_ok=True)
-with open(dest_path, "w", encoding="utf-8") as f:
-    f.write(final_html)
+# Only run scraping/slicing/saving block if tmp/html.txt doesn't already exist
+if not os.path.exists(dest_path):
+
+    print("File not found, proceeding with scraping...")
+
+    # Requests html from "https://coralisland.fandom.com/wiki/Crafting" and converts it to a bs4 object
+    with sync_playwright() as p:
+        browser = p.firefox.launch(headless=False, slow_mo=500)
+        context = browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/115.0"
+        )
+        page = context.new_page()
+
+        page.goto("https://coralisland.fandom.com/wiki/Crafting", timeout=120000)
+        page.wait_for_selector("table.article-table")
+        html = page.content()
+
+        browser.close()
+
+    soup = BeautifulSoup(html, "html.parser")
+
+    # Slices out relevant-to-project html (starting with first <h3> tag and ending inclusively with <table...id="tpt-13"> tag) and prettifies it.
+    start_tag = None
+    for h3 in soup.find_all("h3"):
+        if h3.find("span", id="Storage"):
+            start_tag = h3
+            break
+
+    end_tag = soup.find("table", id="tpt-13")
+
+    wrapper = soup.new_tag("div")
+
+    if start_tag and end_tag:
+        curr = start_tag
+        while curr and curr != end_tag:
+            wrapper.append(copy.copy(curr))
+            curr = curr.find_next_sibling()
+
+        wrapper.append(copy.copy(end_tag))
+
+    final_html = wrapper.prettify()
+
+    # Saves relevant html as html.txt to avoid having to scrape website during certain testing.
+    os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+    with open(dest_path, "w", encoding="utf-8") as f:
+        f.write(final_html)
+
+# Otherwise reference html.txt for relevant testing.
+else:
+    print("File already exists, skipping scraping.")
