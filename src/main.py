@@ -1,7 +1,9 @@
 from playwright.sync_api import sync_playwright
 from bs4 import BeautifulSoup
+import sys
 import os
 import copy
+import re
 
 # Different columns required for different tables. Artisan equipment, Resource equipment,
 # and Item producers all use Product, Ingredients, Produces, and Unlock.
@@ -11,57 +13,81 @@ import copy
 
 # Something to watch out for: All tables contain a first column of checkboxes, which should be excluded for my purposes.
 
+def main():
 
-script_dir = os.path.dirname(os.path.abspath(__file__))
-dest_path = os.path.join(script_dir, "..", "tmp", "html.txt")
+    force_refresh = "--refresh" in sys.argv
 
-# Only run scraping/slicing/saving block if tmp/html.txt doesn't already exist
-if not os.path.exists(dest_path):
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    dest_path = os.path.join(script_dir, "..", "tmp", "html.txt")
 
-    print("File not found, proceeding with scraping...")
+    # Only run scraping/slicing/saving block if tmp/html.txt doesn't already exist
+    if not os.path.exists(dest_path) or force_refresh:
 
-    # Requests html from "https://coralisland.fandom.com/wiki/Crafting" and converts it to a bs4 object
-    with sync_playwright() as p:
-        browser = p.firefox.launch(headless=False, slow_mo=500)
-        context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/115.0"
-        )
-        page = context.new_page()
+        print("File not found, proceeding with scraping...")
 
-        page.goto("https://coralisland.fandom.com/wiki/Crafting", timeout=120000)
-        page.wait_for_selector("table.article-table")
-        html = page.content()
+        # Requests html from "https://coralisland.fandom.com/wiki/Crafting" and converts it to a bs4 object
+        with sync_playwright() as p:
+            browser = p.firefox.launch(headless=False)
+            context = browser.new_context(
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/115.0"
+            )
+            page = context.new_page()
+            page.route(re.compile(r"google|amazon-adsystem|doubleclick|fandom-prod-ads"), block_and_log)
 
-        browser.close()
+            '''
+            # --- AD BLOCKING START ---
+            context.route("*adsafeprotected*", block_and_log)
+            context.route("*amazon-adsystem*", block_and_log)
+            context.route("*doubleclick*", block_and_log)
+            context.route("*google-analytics*", block_and_log)
+            context.route("*googlesyndication*", block_and_log)
+            context.route("*quantserve*", block_and_log)
+            # --- AD BLOCKING END ---
+            '''
+            
+            page.goto("https://coralisland.fandom.com/wiki/Crafting", timeout=120000)
+            page.wait_for_selector("table.article-table")
+            html = page.content()
 
-    soup = BeautifulSoup(html, "html.parser")
+            browser.close()
 
-    # Slices out relevant-to-project html (starting with first <h3> tag and ending inclusively with <table...id="tpt-13"> tag) and prettifies it.
-    start_tag = None
-    for h3 in soup.find_all("h3"):
-        if h3.find("span", id="Storage"):
-            start_tag = h3
-            break
+        soup = BeautifulSoup(html, "html.parser")
 
-    end_tag = soup.find("table", id="tpt-13")
+        # Slices out relevant-to-project html (starting with first <h3> tag and ending inclusively with <table...id="tpt-13"> tag) and prettifies it.
+        start_tag = None
+        for h3 in soup.find_all("h3"):
+            if h3.find("span", id="Storage"):
+                start_tag = h3
+                break
 
-    wrapper = soup.new_tag("div")
+        end_tag = soup.find("table", id="tpt-13")
 
-    if start_tag and end_tag:
-        curr = start_tag
-        while curr and curr != end_tag:
-            wrapper.append(copy.copy(curr))
-            curr = curr.find_next_sibling()
+        wrapper = soup.new_tag("div")
 
-        wrapper.append(copy.copy(end_tag))
+        if start_tag and end_tag:
+            curr = start_tag
+            while curr and curr != end_tag:
+                wrapper.append(copy.copy(curr))
+                curr = curr.find_next_sibling()
 
-    final_html = wrapper.prettify()
+            wrapper.append(copy.copy(end_tag))
 
-    # Saves relevant html as html.txt to avoid having to scrape website during certain testing.
-    os.makedirs(os.path.dirname(dest_path), exist_ok=True)
-    with open(dest_path, "w", encoding="utf-8") as f:
-        f.write(final_html)
+        final_html = wrapper.prettify()
 
-# Otherwise reference html.txt for relevant testing.
-else:
-    print("File already exists, skipping scraping.")
+        # Saves relevant html as html.txt to avoid having to scrape website during certain testing.
+        os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+        with open(dest_path, "w", encoding="utf-8") as f:
+            f.write(final_html)
+
+    # Otherwise reference html.txt for relevant testing.
+    else:
+        print("File already exists, skipping scraping.")
+
+
+def block_and_log(route):
+    print(f"Blocking: {route.request.url}")
+    route.abort()
+
+
+if __name__ == "__main__":
+    main()
