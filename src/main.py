@@ -1,9 +1,7 @@
+from html_to_products import parse_page
 from playwright.sync_api import sync_playwright
 from bs4 import BeautifulSoup
-import sys
-import os
-import copy
-import re
+import sys, os, copy, re
 
 # Different columns required for different tables. Artisan equipment, Resource equipment,
 # and Item producers all use Product, Ingredients, Produces, and Unlock.
@@ -32,18 +30,9 @@ def main():
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/115.0"
             )
             page = context.new_page()
-            page.route(re.compile(r"google|amazon-adsystem|doubleclick|fandom-prod-ads"), block_and_log)
 
-            '''
-            # --- AD BLOCKING START ---
-            context.route("*adsafeprotected*", block_and_log)
-            context.route("*amazon-adsystem*", block_and_log)
-            context.route("*doubleclick*", block_and_log)
-            context.route("*google-analytics*", block_and_log)
-            context.route("*googlesyndication*", block_and_log)
-            context.route("*quantserve*", block_and_log)
-            # --- AD BLOCKING END ---
-            '''
+            # Ad blocking
+            page.route(re.compile(r"google|amazon-adsystem|doubleclick|fandom-prod-ads"), block_and_log)
             
             page.goto("https://coralisland.fandom.com/wiki/Crafting", timeout=120000)
             page.wait_for_selector("table.article-table")
@@ -83,6 +72,10 @@ def main():
     else:
         print("File already exists, skipping scraping.")
 
+    with open(dest_path, "r") as f:
+        cached_html = f.read()
+
+    parse_page(cached_html)
 
 def block_and_log(route):
     print(f"Blocking: {route.request.url}")
