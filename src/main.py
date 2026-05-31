@@ -1,4 +1,4 @@
-from html_to_products import parse_page
+from html_to_products import parse_page, parse_table
 from playwright.sync_api import sync_playwright
 from bs4 import BeautifulSoup
 import sys, os, copy, re
@@ -75,7 +75,7 @@ def main():
     with open(dest_path, "r") as f:
         cached_html = f.read()
 
-    parse_page(cached_html)
+    parse_table(cached_html, "Storage")
 
 def block_and_log(route):
     print(f"Blocking: {route.request.url}")
