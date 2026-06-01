@@ -21,21 +21,42 @@ categories = {
 
 
 class Product:
-    def __init__(self, name, _yield, ingredients, unlock):
+    def __init__(self, name, _yield, ingredients, unlocks):
         self.name = name
         self._yield = _yield
         self.ingredients = ingredients
-        self.unlock = unlock
+        self.unlocks = unlocks
+
+    def __repr__(self):
+        return f'''
+------------------- PRODUCT -------------------
+Name: {self.name}
+Yield: {self._yield}
+Ingredients:\n - {"\n - ".join(str(i) for i in self.ingredients)}
+Unlock Condition(s):\n > {"\n > ".join(self.unlocks)}
+-----------------------------------------------
+'''
 
     def convert_ingredients(self):
         ingredients_list = [[ingredient.name, ingredient.quantity] for ingredient in self.ingredients]
-        return [self.name, self._yield, ingredients_list, self.unlock]
+        return [self.name, self._yield, ingredients_list, self.unlocks]
     
 
 class Crafter(Product):
-    def __init__(self, name, _yield, ingredients, unlock, produces):
-        super().__init__(self, name, _yield, ingredients, unlock)
+    def __init__(self, name, _yield, ingredients, unlocks, produces):
+        super().__init__(name, _yield, ingredients, unlocks)
         self.produces = produces
+
+    def __repr__(self):
+        return f'''
+------------------- PRODUCT -------------------
+Name: {self.name}
+Yield: {self._yield}
+Ingredients:\n - {"\n - ".join(str(i) for i in self.ingredients)}
+Produces:\n = {"\n = ".join(self.produces)}
+Unlock Condition(s):\n > {"\n > ".join(self.unlocks)}
+-----------------------------------------------
+'''
 
     def convert_ingredients(self):
         return super().convert_ingredients()
@@ -51,7 +72,8 @@ class Ingredient:
         self.quantity = quantity
 
     def __repr__(self):
-        return f'name: {self.name}, quantity: {self.quantity}'
+        return f'''Name: {self.name}
+ -- Qty: {self.quantity}'''
 
 
 def parse_page(html):
@@ -83,6 +105,8 @@ def rows_to_products(rows):
         product = row_to_product(row)
         products.append(product)
 
+    for product in products:
+        print(product)
     return products
 
 
@@ -103,32 +127,117 @@ def row_to_product(row):
         print(header)
         return header
 
-    # Otherwise, extract values from each cell and modify as necessary before creating list
+    # Otherwise, extract values from each cell and modify as necessary before creating and returning list
     else:
-        # name and _yield
+        col_count = 0
+
+        # Name and _yield
         col_1 = cells.pop(0)
         col_1_text = col_1.get_text(strip=True)
-        items = re.split(r'[^\w\s]\s?', col_1_text)
+        items = re.split(r'[^\w\s]\s+', col_1_text)
         name, _yield = items
-        print(f'Product name: {name}\nyield: {_yield}')
 
-        # ingredients
+        col_count += 2
+        print(f'\nProduct name: {name}\nyield: {_yield}')
+
+        # Ingredients
         ing_col = cells.pop(0).find("span", class_="icon-list")
-        ing_list = ing_col.find_all("span", class_="custom-icon-text")
-        ingredients = []
+        if ing_col is not None:
+            ing_list = ing_col.find_all("span", class_="custom-icon-text")
 
-        for ing in ing_list:
-            ing_text = ing.get_text(strip=True)
-            ing_items = re.split(r'[^\w\s]\s?', ing_text)
-            ing_name, ing_quant = ing_items
-            ingredients.append(Ingredient(ing_name, ing_quant))
+            if ing_list is not None:
+                ingredients = []
 
-        print("Ingredients:")
-        for item in ingredients:
-            print(item)
+                for ing in ing_list:
+                    ing_text = ing.get_text(strip=True)
+                    ing_items = re.split(r'[^\w\s]\s?', ing_text)
+                    ing_name, ing_quant = ing_items
+                    ingredients.append(Ingredient(ing_name, ing_quant))
 
-        # Optional produces column
+                col_count += 1
+
+                print("Ingredients:")
+                for item in ingredients:
+                    print(item)
+
+            else:
+                print("Error: No custom-icon-text found")
+
+        else:
+            print("Error: No icon-list found")
+
+        # Optional "produces" column
         if len(cells) == 2:
-            
+            prod_col = cells.pop(0).find("div", class_="columntemplate")
 
-        return
+            if prod_col is not None:
+                prod_list = prod_col.find_all("span", class_="custom-icon-text")
+                produces = []
+                
+                if prod_list is not None:
+                    for prod in prod_list:
+                        prod_text = prod.get_text(strip=True)
+                        produces.append(prod_text)
+
+                    col_count += 1
+                    print("Produces:")
+                    for item in produces:
+                        print(item)
+
+                else:
+                    print("Error: No custom-icon-text found")
+
+            else:
+                print("Error: No columntemplate found")
+
+        # Unlock
+        unlock_col = cells.pop(0)
+        unlocks = []
+
+        if unlock_col is not None:
+            for noise in unlock_col.find_all("span", class_=["sort-value", "custom-icon-image"]):
+                noise.decompose()
+
+            raw_entries = list(unlock_col.stripped_strings)
+
+            icon_containers = unlock_col.find_all("span", class_="custom-icon")
+            direct_links = unlock_col.find_all("a", recursive=False)
+
+            all_text = "".join(raw_entries)
+            structured_text = "".join([i.get_text(strip=True) for i in icon_containers] +
+                                      [l.get_text(strip=True) for l in direct_links])
+
+            if (len(icon_containers) + len(direct_links)) > 1 and len(all_text) == len(structured_text):
+                entries = raw_entries
+
+            else:
+                combined = " ".join(raw_entries).strip()
+                entries = [combined] if combined else []
+
+            entries = [e.replace('\xa0', ' ') for e in entries if e]
+
+            print('ENTRIES:')
+            for entry in entries:
+                print(f'--- {entry}')
+
+            unlocks.extend(entries)
+
+            col_count += 1
+            print("Unlock conditions:")
+            for unlock in unlocks:
+                print(unlock)
+            
+        else:
+            print("Error: No unlock column found")
+
+        if col_count == 5:
+            print(f"column count: {col_count}")
+            return Crafter(name, _yield, ingredients, unlocks, produces)
+        
+        elif col_count == 4:
+            print(f"column count: {col_count}")
+            return Product(name, _yield, ingredients, unlocks)
+        
+        else:
+            print("Error: Incorrect number of columns")
+            return
