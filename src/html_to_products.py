@@ -2,7 +2,6 @@ from playwright.sync_api import sync_playwright
 from bs4 import BeautifulSoup
 import os, copy, re
 
-# ADD WAY TO DELETE HTML.TXT AFTER TABLE DATA EXTRACTED AND CONVERTED TO PRODUCT OBJECTS
 
 categories = {
     "Storage": "tpt-1", 
