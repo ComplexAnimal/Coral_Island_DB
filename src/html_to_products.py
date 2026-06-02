@@ -83,7 +83,6 @@ def parse_page(html):
         rows = parse_table(html, category)
         all_products[category] = rows_to_products(rows)
 
-    print(all_products)
     return all_products
 
 
@@ -92,11 +91,10 @@ def parse_table(html, category):
     table_id = categories[category]
 
     table = soup.find("table", id=table_id)
-    print(f"Table found: '{table_id}'")                 # DELETE
     rows = table.find_all("tr")
-    products = rows_to_products(rows)                   # DELETE
+    products = rows_to_products(rows)
 
-    return rows
+    return products
 
 
 def rows_to_products(rows):
@@ -107,6 +105,7 @@ def rows_to_products(rows):
 
     for product in products:
         print(product)
+        
     return products
 
 
@@ -116,15 +115,14 @@ def row_to_product(row):
     # First column is a progress tracker. Useless for the purpose of this program.
     checkbox = cells.pop(0)
 
-    # If row is a header, extract text from each cell and return a list
+    # If row is a header, extract text from each cell, change product to name/yield, and return a list
     if cells[0].name == 'th':
-        header = []
+        header = ['Name', 'Yield']
 
-        for cell in cells:
+        for cell in cells[1:]:
             header_text = cell.get_text(strip=True)
             header.append(header_text)
 
-        print(header)
         return header
 
     # Otherwise, extract values from each cell and modify as necessary before creating and returning list
@@ -138,7 +136,6 @@ def row_to_product(row):
         name, _yield = items
 
         col_count += 2
-        print(f'\nProduct name: {name}\nyield: {_yield}')
 
         # Ingredients
         ing_col = cells.pop(0).find("span", class_="icon-list")
@@ -156,10 +153,6 @@ def row_to_product(row):
 
                 col_count += 1
 
-                print("Ingredients:")
-                for item in ingredients:
-                    print(item)
-
             else:
                 print("Error: No custom-icon-text found")
 
@@ -171,21 +164,21 @@ def row_to_product(row):
             prod_col = cells.pop(0).find("div", class_="columntemplate")
 
             if prod_col is not None:
-                prod_list = prod_col.find_all("span", class_="custom-icon-text")
                 produces = []
-                
-                if prod_list is not None:
-                    for prod in prod_list:
-                        prod_text = prod.get_text(strip=True)
-                        produces.append(prod_text)
 
-                    col_count += 1
-                    print("Produces:")
-                    for item in produces:
-                        print(item)
+                icons = prod_col.find_all("span", class_="custom-icon")
+                for icon in icons:
+                    text_span = icon.find("span", class_="custom-icon-text")
+                    if text_span:
+                        produces.append(text_span.get_text(strip=True))
 
-                else:
-                    print("Error: No custom-icon-text found")
+                direct_links = prod_col.find_all("a", recursive=False)
+                for link in direct_links:
+                    text = link.get_text(strip=True)
+                    if text:
+                        produces.append(text.capitalize())
+
+                col_count += 1
 
             else:
                 print("Error: No columntemplate found")
@@ -216,26 +209,17 @@ def row_to_product(row):
 
             entries = [e.replace('\xa0', ' ') for e in entries if e]
 
-            print('ENTRIES:')
-            for entry in entries:
-                print(f'--- {entry}')
-
             unlocks.extend(entries)
 
             col_count += 1
-            print("Unlock conditions:")
-            for unlock in unlocks:
-                print(unlock)
             
         else:
             print("Error: No unlock column found")
 
         if col_count == 5:
-            print(f"column count: {col_count}")
             return Crafter(name, _yield, ingredients, unlocks, produces)
         
         elif col_count == 4:
-            print(f"column count: {col_count}")
             return Product(name, _yield, ingredients, unlocks)
         
         else:

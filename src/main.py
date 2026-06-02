@@ -75,7 +75,7 @@ def main():
     with open(dest_path, "r") as f:
         cached_html = f.read()
 
-    parse_table(cached_html, "Storage")
+    parse_table(cached_html, "Item producers")
 
 def block_and_log(route):
     print(f"Blocking: {route.request.url}")
