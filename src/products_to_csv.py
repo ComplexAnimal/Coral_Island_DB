@@ -28,12 +28,13 @@ def make_page_csv():
 
 
 def make_table_csv(category):
-    file_name = category.lower() + '_db.csv'
+    file_name = category.lower().replace(' ', '_') + '_db.csv'
     
     script_dir = os.path.dirname(os.path.abspath(__file__))
     dest_path = os.path.join(script_dir, '..', 'csvs', file_name)
 
-    prod_list = parse_table(category)
+    rows = parse_table(category)
+    prod_list = rows_to_products(rows)
 
     os.makedirs(os.path.dirname(dest_path), exist_ok=True)
 
