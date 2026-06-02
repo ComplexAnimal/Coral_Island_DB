@@ -1,7 +1,8 @@
 from playwright.sync_api import sync_playwright
 from bs4 import BeautifulSoup
-import re
+import os, copy, re
 
+# ADD WAY TO DELETE HTML.TXT AFTER TABLE DATA EXTRACTED AND CONVERTED TO PRODUCT OBJECTS
 
 categories = {
     "Storage": "tpt-1", 
@@ -34,10 +35,9 @@ Name: {self.name}
 Yield: {self._yield}
 Ingredients:\n - {"\n - ".join(str(i) for i in self.ingredients)}
 Unlock Condition(s):\n > {"\n > ".join(self.unlocks)}
------------------------------------------------
-'''
+-----------------------------------------------'''
 
-    def convert_ingredients(self):
+    def convert_to_list(self):
         ingredients_list = [[ingredient.name, ingredient.quantity] for ingredient in self.ingredients]
         return [self.name, self._yield, ingredients_list, self.unlocks]
     
@@ -55,15 +55,12 @@ Yield: {self._yield}
 Ingredients:\n - {"\n - ".join(str(i) for i in self.ingredients)}
 Produces:\n = {"\n = ".join(self.produces)}
 Unlock Condition(s):\n > {"\n > ".join(self.unlocks)}
------------------------------------------------
-'''
+-----------------------------------------------'''
 
-    def convert_ingredients(self):
-        return super().convert_ingredients()
-    
-    def add_produces(self):
-        produces_added = self.convert_ingredients().insert(3, self.produces)
-        return produces_added
+    def convert_to_list(self):
+        crafter_list = super().convert_to_list()
+        crafter_list.insert(3, self.produces)
+        return crafter_list
 
 
 class Ingredient:
@@ -76,25 +73,91 @@ class Ingredient:
  -- Qty: {self.quantity}'''
 
 
-def parse_page(html):
+def parse_page():
     all_products = {}
 
     for category in categories:
-        rows = parse_table(html, category)
+        rows = parse_table(category)
         all_products[category] = rows_to_products(rows)
 
     return all_products
 
 
-def parse_table(html, category):
-    soup = BeautifulSoup(html, "html.parser")
+def parse_table(category):
+
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    dest_path = os.path.join(script_dir, '..', 'tmp', 'html.txt')
+
+    # Only run scraping/slicing/saving block if tmp/html.txt doesn't already exist
+    if not os.path.exists(dest_path):
+
+        print('File not found, proceeding with scraping...')
+
+        # Requests html from "https://coralisland.fandom.com/wiki/Crafting" and converts it to a bs4 object
+        with sync_playwright() as p:
+            browser = p.firefox.launch(headless=False)
+            context = browser.new_context(
+                user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/115.0'
+            )
+            page = context.new_page()
+
+            # Ad blocking
+            page.route(re.compile(r'google|amazon-adsystem|doubleclick|fandom-prod-ads'), block_and_log)
+            
+            page.goto('https://coralisland.fandom.com/wiki/Crafting', timeout=120000)
+            page.wait_for_selector('table.article-table')
+            html = page.content()
+
+            browser.close()
+
+        soup = BeautifulSoup(html, 'html.parser')
+
+        # Slices out relevant-to-project html (starting with first <h3> tag and ending inclusively with <table...id="tpt-13"> tag) and prettifies it.
+        start_tag = None
+        for h3 in soup.find_all('h3'):
+            if h3.find('span', id='Storage'):
+                start_tag = h3
+                break
+
+        end_tag = soup.find('table', id='tpt-13')
+
+        wrapper = soup.new_tag('div')
+
+        if start_tag and end_tag:
+            curr = start_tag
+            while curr and curr != end_tag:
+                wrapper.append(copy.copy(curr))
+                curr = curr.find_next_sibling()
+
+            wrapper.append(copy.copy(end_tag))
+
+        final_html = wrapper.prettify()
+
+        # Saves relevant html as html.txt to avoid having to scrape website each time parse_table called.
+        os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+        with open(dest_path, 'w', encoding='utf-8') as f:
+            f.write(final_html)
+
+    # Otherwise reference html.txt for relevant testing.
+    else:
+        print('File already exists, skipping scraping.')
+
+    os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+    with open(dest_path, 'r') as f:
+        final_html = f.read()
+
+    soup = BeautifulSoup(final_html, "html.parser")
     table_id = categories[category]
 
     table = soup.find("table", id=table_id)
     rows = table.find_all("tr")
-    products = rows_to_products(rows)
 
-    return products
+    return rows
+
+
+def block_and_log(route):
+    print(f'Blocking: {route.request.url}')
+    route.abort()
 
 
 def rows_to_products(rows):
@@ -102,9 +165,6 @@ def rows_to_products(rows):
     for row in rows:
         product = row_to_product(row)
         products.append(product)
-
-    for product in products:
-        print(product)
         
     return products
 
