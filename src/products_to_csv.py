@@ -26,6 +26,11 @@ def make_page_csv():
 
                 writer.writerow(vals)
 
+    html_path = os.path.join(script_dir, '..', 'tmp', 'html.txt')
+
+    if os.path.exists(html_path):
+        os.remove(html_path)
+
 
 def make_table_csv(category):
     file_name = category.lower().replace(' ', '_') + '_db.csv'
@@ -50,3 +55,8 @@ def make_table_csv(category):
                 vals = item
 
             writer.writerow(vals)
+            
+    html_path = os.path.join(script_dir, '..', 'tmp', 'html.txt')
+
+    if os.path.exists(html_path):
+        os.remove(html_path)
